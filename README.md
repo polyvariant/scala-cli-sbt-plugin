@@ -19,7 +19,9 @@ PLUGIN_VERSION=1.2.3 just scripted
 just scripted-released         # uses PLUGIN_VERSION; expects artifact on Central
 ```
 
-`just scripted` publishes the plugin into a scratch m2 (`<organization>/<name>_2.12_1.0/<version>/` — sbt's Maven cross-paths convention), then spawns sbt with `-Dsbt.repository.config` pointing at the scratch repo.
+`just scripted` publishes the plugin via `scala-cli publish --ivy2-local-like` into a scratch staging dir, then post-processes the result into a scratch ivy home (`<work>/ivy/local/<org>/<name>/scala_2.12/sbt_1.0/<rev>/`) — the sbt-plugin Ivy layout. `ivy.xml` gets patched to add the `e:scalaVersion`/`e:sbtVersion` cross-attributes (which scala-cli doesn't emit), and checksums are regenerated. The spawned sbt picks the plugin up through its default `local` resolver against the scratch ivy home — no `repo.config` involved.
+
+For `just scripted-released`, `sbt-test/.../project/plugins.sbt` reads `plugin.snapshots=true` to register the Central snapshots resolver when verifying a `-SNAPSHOT` version.
 
 ## Publish to Maven Central
 
