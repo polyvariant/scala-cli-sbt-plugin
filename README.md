@@ -26,12 +26,21 @@ The runner shells out to `scala-cli publish local --maven-local --m2-home <scrat
 scala-cli run build -- publish --signer gpg --gpg-key <KEY_ID>
 ```
 
+## Versioning
+
+`Plugin.scala` uses `//> using publish.computeVersion git:dynver`:
+
+- On a `v*` tag → the tag (e.g. `v0.1.0` → `0.1.0`).
+- On any other commit → `<lastTag>+<n>-<sha>-SNAPSHOT` (e.g. `0.1.0+3-abc1234-SNAPSHOT`).
+
+scala-cli routes `-SNAPSHOT` versions to the Central snapshots host automatically.
+
 ## CI pipeline (`.github/workflows/ci.yml`)
 
 Three jobs, chained via `needs:`:
 
 1. **`test`** — runs on every push and PR. Executes `scala-cli run build -- scripted` against the working tree (publishes the plugin into a scratch m2 and runs the scripted tests).
-2. **`publish`** — runs on `main` pushes and `v*` tags, after `test` passes. Imports the GPG key from `PGP_SECRET`, configures Sonatype credentials, and runs `scala-cli run build -- publish --signer gpg --gpg-key DB33C5B9DA1A245B`.
+2. **`publish`** — runs on `main` pushes and `v*` tags, after `test` passes. Imports the GPG key from `PGP_SECRET`, configures Sonatype credentials, and runs `scala-cli run build -- publish --signer gpg --gpg-key DB33C5B9DA1A245B`. On `main` this produces a `-SNAPSHOT` artifact; on a `v*` tag, a release.
 3. **`verify-release`** — runs on `v*` tags only, after `publish`. Polls Maven Central until the released `.pom` is reachable (up to ~15 minutes), then runs `scala-cli run build -- scripted --no-publish` with `PLUGIN_VERSION=<tag>` so the scripted tests resolve the *released* artifact from Central rather than the scratch repo.
 
 Required secrets: `PGP_SECRET`, `SONATYPE_USERNAME`, `SONATYPE_PASSWORD`.

@@ -4,7 +4,7 @@
 
 //> using publish.organization org.polyvariant
 //> using publish.name scala-cli-sbt-plugin-poc
-//> using publish.computeVersion git:tag
+//> using publish.computeVersion git:dynver
 //> using publish.developers "kubukoz|Jakub Kozłowski|https://github.com/kubukoz"
 //> using publish.license Apache-2.0
 //> using publish.repository central
