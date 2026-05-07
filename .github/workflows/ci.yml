@@ -101,6 +101,8 @@ jobs:
 
       - uses: coursier/cache-action@v6
 
+      - uses: coursier/setup-action@v1
+
       - uses: VirtusLab/scala-cli-setup@main
         with:
           power: true
@@ -108,28 +110,25 @@ jobs:
       - uses: extractions/setup-just@v3
 
       - name: Wait for Central sync
-        # Releases land on repo1.maven.org; snapshots on
-        # central.sonatype.com/repository/maven-snapshots/. Poll the right one.
+        # Snapshots land on central.sonatype.com/repository/maven-snapshots/,
+        # releases sync to repo1.maven.org. cs resolve handles both via
+        # --repository, and exits non-zero if the artifact isn't reachable yet.
         run: |
           if [[ "$PLUGIN_VERSION" == *-SNAPSHOT ]]; then
-            base="https://central.sonatype.com/repository/maven-snapshots"
+            repo="https://central.sonatype.com/repository/maven-snapshots/"
           else
-            base="https://repo1.maven.org/maven2"
-          fi
-          url="${base}/org/polyvariant/scala-cli-sbt-plugin-poc_2.12_1.0/${PLUGIN_VERSION}/maven-metadata.xml"
-          # For non-snapshot, maven-metadata.xml lives one level up; check the .pom instead.
-          if [[ "$PLUGIN_VERSION" != *-SNAPSHOT ]]; then
-            url="${base}/org/polyvariant/scala-cli-sbt-plugin-poc_2.12_1.0/${PLUGIN_VERSION}/scala-cli-sbt-plugin-poc_2.12_1.0-${PLUGIN_VERSION}.pom"
+            repo="central"
           fi
           for i in $(seq 1 30); do
-            if curl --fail --silent --head "$url" > /dev/null; then
-              echo "Found $url"
+            if cs resolve "org.polyvariant:scala-cli-sbt-plugin-poc_2.12_1.0:${PLUGIN_VERSION}" \
+                 --repository "$repo" --mode force > /dev/null 2>&1; then
+              echo "Resolved org.polyvariant:scala-cli-sbt-plugin-poc_2.12_1.0:${PLUGIN_VERSION}"
               exit 0
             fi
             echo "Not yet on Central ($i/30), sleeping..."
             sleep 30
           done
-          echo "Artifact never appeared at $url"
+          echo "Artifact never resolved"
           exit 1
 
       - run: just scripted-released
