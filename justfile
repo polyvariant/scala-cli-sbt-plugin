@@ -6,7 +6,7 @@ plugin_module := plugin_name + "_2.12_1.0"
 sbt_version   := "1.10.7"
 work_dir      := ".scripted-work"
 plugin_dir    := "plugin"
-sbt_test_root := plugin_dir + "/src/sbt-test"
+sbt_test_root := "sbt-test"
 
 # Run scripted tests against the working tree (publishes plugin into a scratch m2 first).
 scripted *tests:
