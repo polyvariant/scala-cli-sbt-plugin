@@ -83,11 +83,15 @@ object Runner {
     )
   }
 
-  /** Publish to Maven Central (or wherever publish.repository points). */
-  def publish(pluginDir: os.Path, extraArgs: Seq[String]): Unit = {
+  /** Publish to Maven Central (or wherever publish.repository points).
+    * `--workspace` is set to the project root so `git:dynver` resolves against
+    * the repository, since `pluginDir` is itself a subdirectory without `.git`.
+    */
+  def publish(projectRoot: os.Path, pluginDir: os.Path, extraArgs: Seq[String]): Unit = {
     val cmd = Seq(
       "scala-cli", "--power", "publish",
       pluginDir.toString,
+      "--workspace", projectRoot.toString,
       "--module-name", PluginModule,
     ) ++ extraArgs
     println(s"[runner] ${cmd.mkString(" ")}")
@@ -157,7 +161,7 @@ object Runner {
 
     args.toList match {
       case "scripted" :: rest => runScripted(rest)
-      case "publish" :: rest  => publish(pluginDir, rest)
+      case "publish" :: rest  => publish(root, pluginDir, rest)
       case Nil                => runScripted(Nil)
       case other =>
         sys.error(
