@@ -1,0 +1,113 @@
+name: CI
+on:
+  push:
+    branches: ["main"]
+    tags: ["v*"]
+  pull_request:
+    branches: ["*"]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Run scripted tests
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: 21
+          distribution: temurin
+
+      - uses: coursier/cache-action@v6
+
+      - uses: VirtusLab/scala-cli-setup@main
+        with:
+          power: true
+
+      - name: Run scripted tests
+        run: scala-cli run build -- scripted
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main'
+    needs: test
+    name: Publish to Maven Central
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: 21
+          distribution: temurin
+
+      - uses: coursier/cache-action@v6
+
+      - uses: VirtusLab/scala-cli-setup@main
+        with:
+          power: true
+
+      - name: Publish
+        run: |
+          scala-cli config publish.credentials central.sonatype.com env:SONATYPE_USERNAME env:SONATYPE_PASSWORD
+          scala-cli config publish.credentials ossrh-staging-api.central.sonatype.com env:SONATYPE_USERNAME env:SONATYPE_PASSWORD
+          ./.github/workflows/import-gpg.sh
+          scala-cli run build -- publish --signer gpg --gpg-key DB33C5B9DA1A245B
+        env:
+          PGP_PASSPHRASE: ""
+          PGP_SECRET: ${{ secrets.PGP_SECRET }}
+          SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
+          SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
+
+  verify-release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: publish
+    name: Re-run scripted tests against released artifact
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: 21
+          distribution: temurin
+
+      - uses: coursier/cache-action@v6
+
+      - uses: VirtusLab/scala-cli-setup@main
+        with:
+          power: true
+
+      - name: Wait for Maven Central sync
+        # Sonatype Central propagation can take several minutes after publish.
+        # Poll up to ~15 minutes for the released artifact to appear.
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          url="https://repo1.maven.org/maven2/org/polyvariant/scala-cli-sbt-plugin-poc_2.12_1.0/${version}/scala-cli-sbt-plugin-poc_2.12_1.0-${version}.pom"
+          for i in $(seq 1 30); do
+            if curl --fail --silent --head "$url" > /dev/null; then
+              echo "Found $url"
+              exit 0
+            fi
+            echo "Not yet on Maven Central ($i/30), sleeping..."
+            sleep 30
+          done
+          echo "Artifact never appeared at $url"
+          exit 1
+
+      - name: Run scripted tests against released artifact
+        env:
+          PLUGIN_VERSION: ${{ github.ref_name }}
+        run: |
+          # strip leading "v" from the tag (e.g. v0.1.2 -> 0.1.2)
+          export PLUGIN_VERSION="${PLUGIN_VERSION#v}"
+          scala-cli run build -- scripted --no-publish
