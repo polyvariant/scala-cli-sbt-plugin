@@ -42,6 +42,6 @@ Three jobs, chained via `needs:`:
 
 1. **`test`** — runs on every push and PR. `just scripted`.
 2. **`publish`** — runs on `main` pushes and `v*` tags, after `test` passes. Imports the GPG key from `PGP_SECRET`, configures Sonatype credentials, and runs `just publish --signer gpg --gpg-key DB33C5B9DA1A245B`. On `main` this produces a `-SNAPSHOT` artifact; on a `v*` tag, a release.
-3. **`verify-release`** — runs on `v*` tags only, after `publish`. Polls Maven Central until the released `.pom` is reachable (up to ~15 minutes), then `just scripted-released` resolves the *released* artifact from Central rather than the scratch repo.
+3. **`verify-release`** — runs after `publish` on both `main` and `v*` tags. Reads the version from a `publish` job output (computed via a dummy `scala-cli publish --dummy`), polls the appropriate Central host (snapshots vs releases) until the artifact is reachable (up to ~15 minutes), then `just scripted-released` resolves it from Central rather than the scratch repo.
 
 Required secrets: `PGP_SECRET`, `SONATYPE_USERNAME`, `SONATYPE_PASSWORD`.

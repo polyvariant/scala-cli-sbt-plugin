@@ -39,6 +39,8 @@ jobs:
     needs: test
     name: Publish to Maven Central
     runs-on: ubuntu-22.04
+    outputs:
+      version: ${{ steps.compute-version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -56,6 +58,18 @@ jobs:
           power: true
 
       - uses: extractions/setup-just@v3
+
+      - name: Compute version
+        id: compute-version
+        # Run a dummy publish to coerce scala-cli into computing the version
+        # (via publish.computeVersion git:dynver), then parse it from the
+        # "Publishing org:name:VERSION" line.
+        run: |
+          line=$(scala-cli --power publish plugin --workspace . --dummy --signer none \
+            --module-name scala-cli-sbt-plugin-poc_2.12_1.0 2>&1 | grep -E '^Publishing ' | head -1)
+          version="${line##*:}"
+          echo "Computed version: $version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Publish
         run: |
@@ -70,10 +84,11 @@ jobs:
           SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
 
   verify-release:
-    if: startsWith(github.ref, 'refs/tags/v')
     needs: publish
-    name: Re-run scripted tests against released artifact
+    name: Re-run scripted tests against published artifact
     runs-on: ubuntu-22.04
+    env:
+      PLUGIN_VERSION: ${{ needs.publish.outputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -92,27 +107,29 @@ jobs:
 
       - uses: extractions/setup-just@v3
 
-      - name: Wait for Maven Central sync
-        # Sonatype Central propagation can take several minutes after publish.
-        # Poll up to ~15 minutes for the released artifact to appear.
+      - name: Wait for Central sync
+        # Releases land on repo1.maven.org; snapshots on
+        # central.sonatype.com/repository/maven-snapshots/. Poll the right one.
         run: |
-          version="${GITHUB_REF_NAME#v}"
-          url="https://repo1.maven.org/maven2/org/polyvariant/scala-cli-sbt-plugin-poc_2.12_1.0/${version}/scala-cli-sbt-plugin-poc_2.12_1.0-${version}.pom"
+          if [[ "$PLUGIN_VERSION" == *-SNAPSHOT ]]; then
+            base="https://central.sonatype.com/repository/maven-snapshots"
+          else
+            base="https://repo1.maven.org/maven2"
+          fi
+          url="${base}/org/polyvariant/scala-cli-sbt-plugin-poc_2.12_1.0/${PLUGIN_VERSION}/maven-metadata.xml"
+          # For non-snapshot, maven-metadata.xml lives one level up; check the .pom instead.
+          if [[ "$PLUGIN_VERSION" != *-SNAPSHOT ]]; then
+            url="${base}/org/polyvariant/scala-cli-sbt-plugin-poc_2.12_1.0/${PLUGIN_VERSION}/scala-cli-sbt-plugin-poc_2.12_1.0-${PLUGIN_VERSION}.pom"
+          fi
           for i in $(seq 1 30); do
             if curl --fail --silent --head "$url" > /dev/null; then
               echo "Found $url"
               exit 0
             fi
-            echo "Not yet on Maven Central ($i/30), sleeping..."
+            echo "Not yet on Central ($i/30), sleeping..."
             sleep 30
           done
           echo "Artifact never appeared at $url"
           exit 1
 
-      - name: Run scripted tests against released artifact
-        env:
-          PLUGIN_VERSION: ${{ github.ref_name }}
-        run: |
-          # strip leading "v" from the tag (e.g. v0.1.2 -> 0.1.2)
-          export PLUGIN_VERSION="${PLUGIN_VERSION#v}"
-          just scripted-released
+      - run: just scripted-released
