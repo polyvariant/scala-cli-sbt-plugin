@@ -1,5 +1,5 @@
 //> using scala 2.12.20
-//> using dep org.scala-sbt::scripted-sbt-redux:1.10.7
+//> using dep org.scala-sbt::scripted-sbt-redux:1.12.11
 
 // ScriptedRunner driver. Everything else (publish-locally, fetching sbt-launch)
 // is the caller's responsibility — see justfile.
