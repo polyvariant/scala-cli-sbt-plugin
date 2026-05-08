@@ -75,7 +75,7 @@ fi
 sbt_launch=$(cs fetch "org.scala-sbt:sbt-launch:${sbt_version}" | grep "/sbt-launch-${sbt_version}.jar$" | head -1)
 echo "[scripted-impl] using sbt-launch: $sbt_launch"
 
-scala-cli run build/scripted.scala -- \
+scala-cli run build/scripted.scala build/SbtHandler.scala -- \
   "$(pwd)/${sbt_test_root}" \
   "$sbt_launch" \
   "$(pwd)/${work_dir}/ivy" \
